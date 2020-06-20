@@ -1,0 +1,50 @@
+version: '3.4'
+
+services:
+    db:
+        image: mysql:5.7
+        restart: always
+        command: --character-set-server=utf8 --explicit_defaults_for_timestamp --sql-mode=""
+        environment:
+          - MYSQL_ROOT_PASSWORD=example
+          - MYSQL_DATABASE=energymanage
+          - TZ=Asia/Shanghai
+        ports:
+          - "33061:3306"
+        volumes:
+          - "./db:/db"
+
+    mongo:
+        image: mongo:3.2
+        command: mongod --smallfiles
+        ports:
+          - 27017:27017
+        depends_on:
+          - mongo_seed
+
+    mongo_seed:
+        build:
+          context: ops/deploy/
+          dockerfile: docker/Dockerfile_mongo_seed
+        entrypoint: /wait-for-it.sh mongo:27017 --
+        command: mongoimport --host mongo --db EnergyManage --collection projects --type json --file /init.json
+
+    redis:
+        image: redis:4
+        restart: always
+        ports:
+          - 6379:6379
+
+    app:
+        build:
+          context: .
+          dockerfile: ops/Dockerfile-dev
+        environment:
+          - TZ=Asia/Shanghai
+          - RDS_READ=[{"host":"db","port":3306,"username":"root","password":"example","database":"energymanage"}]
+          - RDS_WRITE={"host":"db","port":3306,"username":"root","password":"example","database":"energymanage"}
+          - MONGODB_URL=mongodb://mongo:27017/EnergyManage
+        depends_on:
+          - redis
+          - db
+          - mongo
